@@ -63,11 +63,22 @@ class DataPipeline:
         print("streamer added and running...")
     
 
-    def historic_stocks_data(self):
+    def historic_stocks_update(self):
+        #TODO: Add the logic for specifying the from and to date, filters and reported frequency
         historic_datafetcher = HistoricDataFetcher()
 
-        return historic_datafetcher.get_data()
+        stock_data = []
 
+        for stock in self.stock_symbols:
+            stock_data.append(
+                historic_datafetcher.get_data(
+                    symbol=stock
+                )
+            )
+        #TODO: Add the logic for sending the financial data to the mongodb atlas
+        print(stock_data)
+
+        
     def stock_daily(self):
         print("daily added and running...")
         self.daily_scheduler.add_job(self.daily_production, 'cron', day_of_week="mon-fri", minute="*/5", id="daily")
@@ -75,7 +86,6 @@ class DataPipeline:
         print("daily ended")
         
 
-    #TODO: Add the logic for sending the financial data to the mongodb atlas
     def stock_weekly_financials(self):
         self.weekly_scheduler.add_job(self.historic_stocks_data, "cron", day_of_week="sat", hour=18)
         self.weekly_scheduler.start()

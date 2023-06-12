@@ -34,23 +34,30 @@ class GCPSecretManager():
 
 class HistoricDataFetcher:
     def __init__(self, *params, **kwparams) -> None:
+        self.filters = kwparams.get("filters", "all")
+        self.reported_freq = kwparams.get("reportd_freq", "annual")
+        self.stock_symbol = kwparams.get("symbol", "AAPL")
+        self._from = kwparams.get("_from", "2023-01-01")
+        self._to = kwparams.get("_to", "2023-03-01")
         self.api_key = GCPSecretManager(secret_config="finnhub_config").get_secret()
         self.client = finnhub.Client(api_key=self.api_key)
 
     
     def get_data(self, *params, **kwparams):
-        stock_symbol = kwparams.get("symbol", "AAPL")
         print(self.api_key)
-
+        stock_symbol = kwparams.get("symbol", self.stock_symbol)
         historic_data = {
             "company_details": self.client.company_profile2(symbol=stock_symbol),
             "news": self.client.company_news(
                         stock_symbol, 
-                        _from=kwparams.get("from", "2023-01-01"), 
-                        to=kwparams.get("to", "2023-03-01")
+                        _from=kwparams.get("_from", self._from), 
+                        to=kwparams.get("_to", self._to)
                     ),
-            "basic_financials": self.client.company_basic_financials(stock_symbol, kwparams.get("filters", "all")),
-            "financials_as_reported": self.client.financials_reported(symbol=stock_symbol, freq=kwparams.get("reported_freq", "annual"))
+            "basic_financials": self.client.company_basic_financials(stock_symbol, kwparams.get("filters", self.filters)),
+            "financials_as_reported": self.client.financials_reported(
+                                            symbol=stock_symbol, 
+                                            freq=kwparams.get("reported_freq", self.reported_freq)
+                                        )
         }
         print(historic_data["company_details"])
 
