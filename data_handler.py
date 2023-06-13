@@ -8,6 +8,8 @@ from pymongo.server_api import ServerApi
 from urllib.parse import quote_plus , quote
 from google.cloud import secretmanager
 from datetime import datetime as dt
+from google.cloud import bigquery
+import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -134,8 +136,52 @@ class DataBaseHandler:
     
 
     #TODO: Add the logic to push data to big query
-    def send_to_bq(data):
-        pass
+    def send_to_bq(self,data):
+        df = pd.DataFrame(columns=['symbol','datetime','open', 'high', 'low', 'close', 'volume'])
+        for i in data:
+            meta = i['meta']
+            values = i["values"][0]
+            symbol,datetime_data,open_price, high, low, close_price, volume = meta['symbol'],values['datetime'],values['open'],values['high'],values['low'], values['close'],values['volume']
+            #final_data = list(symbol,interval,currency,exhange_tz, exc,mic,type_stk,datetime_data,open_price, high, low, close_price, volume)
+            df.loc[len(df)] = [symbol,datetime_data,open_price, high, low, close_price, volume]
+
+        client = bigquery.Client('de2-gcp')
+        job_config = bigquery.LoadJobConfig(
+    # Specify a (partial) schema. All columns are always written to the
+    # table. The schema is used to assist in data type definitions.
+        schema=[
+        # Specify the type of columns whose type cannot be auto-detected. For
+        # example the "title" column uses pandas dtype "object", so its
+        # data type is ambiguous.
+        bigquery.SchemaField("order_id", bigquery.enums.SqlTypeNames.INTEGER),
+        # Indexes are written if included in the schema by name.
+        bigquery.SchemaField("order_date", bigquery.enums.SqlTypeNames.STRING),
+        bigquery.SchemaField(" order_customer_id", bigquery.enums.SqlTypeNames.INTEGER),
+        bigquery.SchemaField(" order_status", bigquery.enums.SqlTypeNames.STRING)
+        
+        ],
+    # Optionally, set the write disposition. BigQuery appends loaded rows
+    # to an existing table by default, but with WRITE_TRUNCATE write
+    # disposition it replaces the table with the loaded data.
+        write_disposition="WRITE_TRUNCATE",
+        )
+        table_id = "de2-gcp.partdata01.part_data_table"
+
+        job = client.load_table_from_dataframe(
+        df, table_id, job_config=job_config
+        )  # Make an API request.
+        job.result()  # Wait for the job to complete.
+
+        table = client.get_table(table_id)  # Make an API request.
+        print(
+            "Loaded {} rows and {} columns to {}".format(
+            table.num_rows, len(table.schema), table_id
+        )
+        )
+
+        return print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
+
+
 
 if __name__ == "__main__":
 
