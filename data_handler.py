@@ -7,6 +7,7 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from urllib.parse import quote_plus , quote
 from google.cloud import secretmanager
+from datetime import datetime as dt
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -61,7 +62,8 @@ class HistoricDataFetcher:
             "financials_as_reported": self.client.financials_reported(
                                             symbol=stock_symbol, 
                                             freq=kwparams.get("reported_freq", self.reported_freq)
-                                        )
+                                        ),
+            "created_at": dt.now()
         }
         print(historic_data["company_details"])
 
@@ -108,17 +110,19 @@ class DataBaseHandler:
         self.mongo_creds = json.loads(GCPSecretManager(secret_config="mongoatlas_config").get_secret())
         username = self.mongo_creds["username"]
         password = quote_plus(self.mongo_creds["password"])
-        cluster_name = ENV.get("mongoatlas_config").get("cluster_name")
+        cluster = ENV.get("mongoatlas_config").get("cluster")
+        db_name = ENV.get("mongoatlas_config").get("db_name")
 
         # Escape the username and password
         escaped_username = quote_plus(username)
+        escaped_password = quote_plus(password)
 
         # Construct the MongoDB URI
-        uri = f"mongodb+srv://{escaped_username}:{password}@{cluster_name}.hniaspm.mongodb.net/?retryWrites=true&w=majority"
+        uri = f"mongodb+srv://{escaped_username}:{escaped_password}@{cluster}/?retryWrites=true&w=majority"
 
         # Create a new client and connect to the server
         self.client = MongoClient(uri, server_api=ServerApi('1'))
-        self.db = self.client["Financials"]
+        self.db = self.client[db_name]
     
 
     def store_data(self, collection_name, data):
@@ -127,6 +131,11 @@ class DataBaseHandler:
         # Insert the data into the collection
         collection.insert_many(data)
         print(f"Stored {len(data)} records in the {collection_name} collection.")
+    
+
+    #TODO: Add the logic to push data to big query
+    def send_to_bq(data):
+        pass
 
 if __name__ == "__main__":
 

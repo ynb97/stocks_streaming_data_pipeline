@@ -78,30 +78,32 @@ class DataPipeline:
                     symbol=stock
                 )
             )
-        #TODO: Add the logic for sending the financial data to the mongodb atlas
-        self.db_handler.store_data("Financials", stock_data)
+        self.db_handler.store_data("StockFinancials", stock_data)
         # print(stock_data)
 
         
     def stock_daily(self):
         print("daily added and running...")
-        self.daily_scheduler.add_job(self.daily_stocks_update, 'cron', day_of_week="mon-fri", minute=18, id="daily")
+        self.daily_scheduler.add_job(self.daily_stocks_update, 'cron', day_of_week="mon-fri", minute=52, id="daily")
         self.daily_scheduler.start()
         
 
     def stock_weekly_financials(self):
         self.db_handler = DataBaseHandler()
-        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=32)
+        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=59)
         self.weekly_scheduler.start()
     
 
-    #TODO: Add the logic for pushing data to db after retrieving it via kafka consumer
     def kafka_consumer_to_db(self):
         data = self.kafka_client.retrieve_data()
+        #TODO: Update the method for pushing data to db(Big Query) after retrieving it via kafka consumer
+        self.db_handler_consumer.send_to_bq(data)
+
         print(data)
 
     
     def stocks_db_update(self):
+        self.db_handler_consumer = DataBaseHandler()
         print("Stocks db updater started")
         if self.db_update_scheduler.state == 2:
             self.db_update_scheduler.resume()
