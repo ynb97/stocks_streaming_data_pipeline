@@ -15,7 +15,7 @@ class DataPipeline:
         self.db_scheduler = BlockingScheduler()
         self.EST = pytz.timezone("US/Eastern")
         self.UTC = pytz.utc
-        self.current_date = dt.today() - td(days=1)
+        self.current_date = dt.today()
         self.market_start_time = dt.combine(self.current_date, t(9, 30, 00, 0, self.EST))
         self.kafka_client = KafkaClient()
 
@@ -67,8 +67,10 @@ class DataPipeline:
     
 
     def historic_stocks_update(self):
-        #TODO: Add the logic for specifying the from and to date, filters and reported frequency
-        historic_datafetcher = HistoricDataFetcher()
+        historic_datafetcher = HistoricDataFetcher(
+                                _from=(self.current_date - td(days=7)).date().strftime("%Y-%m-%d"), 
+                                _to=self.current_date.date().strftime("%Y-%m-%d")
+                            )
 
         stock_data = []
 
@@ -90,13 +92,12 @@ class DataPipeline:
 
     def stock_weekly_financials(self):
         self.db_handler = DataBaseHandler()
-        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=59)
+        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=26)
         self.weekly_scheduler.start()
     
 
     def kafka_consumer_to_db(self):
         data = self.kafka_client.retrieve_data()
-        #TODO: Update the method for pushing data to db(Big Query) after retrieving it via kafka consumer
         self.db_handler_consumer.send_to_bq(data)
 
         print(data)
