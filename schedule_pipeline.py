@@ -1,19 +1,23 @@
 import pytz
+import json
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime as dt, time as t, timedelta as td
-from fetch_data import StreamDataFetcher, HistoricDataFetcher
-
+from data_handler import StreamDataFetcher, HistoricDataFetcher, DataBaseHandler
+from kafka_client import KafkaClient
 
 class DataPipeline:
     def __init__(self) -> None:
         self.daily_scheduler = BlockingScheduler()
         self.weekly_scheduler = BlockingScheduler()
         self.stream_scheduler = BackgroundScheduler()
+        self.db_update_scheduler = BackgroundScheduler()
+        self.db_scheduler = BlockingScheduler()
         self.EST = pytz.timezone("US/Eastern")
         self.UTC = pytz.utc
-        self.current_date = dt.today()
+        self.current_date = dt.today() - td(days=1)
         self.market_start_time = dt.combine(self.current_date, t(9, 30, 00, 0, self.EST))
+        self.kafka_client = KafkaClient()
 
         self.stock_symbols = [
             "AAPL",
@@ -41,17 +45,16 @@ class DataPipeline:
         for stock in self.stock_symbols:
             stock_data.append(data_fetcher.get_data(symbol=stock))
         
-        #TODO: replace the print statement with the kafka producer method
-        print(stock_data)
+        self.kafka_client.send_data(json.dumps(stock_data))
 
-        if self.time_head.hour > 16:
+        if self.time_head.minute > 50:
             self.stream_scheduler.pause()
             print("streamer paused")
 
         self.time_head = self.time_head + td(minutes=1)
                 
 
-    def daily_production(self):
+    def daily_stocks_update(self):
         print("daily production...")
         self.time_head = self.market_start_time
         print(self.time_head)
@@ -76,21 +79,52 @@ class DataPipeline:
                 )
             )
         #TODO: Add the logic for sending the financial data to the mongodb atlas
-        print(stock_data)
+        self.db_handler.store_data("Financials", stock_data)
+        # print(stock_data)
 
         
     def stock_daily(self):
         print("daily added and running...")
-        self.daily_scheduler.add_job(self.daily_production, 'cron', day_of_week="mon-fri", minute="*/5", id="daily")
+        self.daily_scheduler.add_job(self.daily_stocks_update, 'cron', day_of_week="mon-fri", minute=18, id="daily")
         self.daily_scheduler.start()
-        print("daily ended")
         
 
     def stock_weekly_financials(self):
-        self.weekly_scheduler.add_job(self.historic_stocks_data, "cron", day_of_week="sat", hour=18)
+        self.db_handler = DataBaseHandler()
+        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=32)
         self.weekly_scheduler.start()
+    
+
+    #TODO: Add the logic for pushing data to db after retrieving it via kafka consumer
+    def kafka_consumer_to_db(self):
+        data = self.kafka_client.retrieve_data()
+        print(data)
+
+    
+    def stocks_db_update(self):
+        print("Stocks db updater started")
+        if self.db_update_scheduler.state == 2:
+            self.db_update_scheduler.resume()
+        else:
+            self.db_update_scheduler.add_job(self.kafka_consumer_to_db, "interval", seconds=10, id='consumer-streamer')
+            self.db_update_scheduler.start()
+    
+
+    def daily_db_schedule(self):
+        try:
+            self.db_scheduler.add_job(self.stocks_db_update, "cron", minute=4, id="db-schedule")
+            self.db_scheduler.start()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.kafka_client.consumer.close()
 
 
 if __name__ == "__main__":
     data_pipeline = DataPipeline()
-    data_pipeline.stock_daily()
+    try:
+        data_pipeline.daily_db_schedule()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        data_pipeline.kafka_client.consumer.close()

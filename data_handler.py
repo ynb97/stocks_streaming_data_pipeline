@@ -2,6 +2,10 @@ import requests
 import json
 import os
 import finnhub
+import requests
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+from urllib.parse import quote_plus , quote
 from google.cloud import secretmanager
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -98,9 +102,40 @@ class StreamDataFetcher:
         return requests.get(self.url, params=query_params).text
 
 
-if __name__ == "__main__":
-    historic_datafetcher = HistoricDataFetcher()
-    historic_datafetcher.get_data()
+class DataBaseHandler:
+    def __init__(self) -> None:
+        # Define the MongoDB connection details
+        self.mongo_creds = json.loads(GCPSecretManager(secret_config="mongoatlas_config").get_secret())
+        username = self.mongo_creds["username"]
+        password = quote_plus(self.mongo_creds["password"])
+        cluster_name = ENV.get("mongoatlas_config").get("cluster_name")
 
-    stream_datafetcher = StreamDataFetcher()
-    print(stream_datafetcher.get_data())
+        # Escape the username and password
+        escaped_username = quote_plus(username)
+
+        # Construct the MongoDB URI
+        uri = f"mongodb+srv://{escaped_username}:{password}@{cluster_name}.hniaspm.mongodb.net/?retryWrites=true&w=majority"
+
+        # Create a new client and connect to the server
+        self.client = MongoClient(uri, server_api=ServerApi('1'))
+        self.db = self.client["Financials"]
+    
+
+    def store_data(self, collection_name, data):
+        # Get the collection from the database
+        collection = self.db[collection_name]
+        # Insert the data into the collection
+        collection.insert_many(data)
+        print(f"Stored {len(data)} records in the {collection_name} collection.")
+
+if __name__ == "__main__":
+
+    db_handler = DataBaseHandler()
+
+    # db_handler.store_data("Financials", [{"dummy": "dummy value"}])
+    db_handler.client.close()
+    # historic_datafetcher = HistoricDataFetcher()
+    # historic_datafetcher.get_data()
+
+    # stream_datafetcher = StreamDataFetcher()
+    # print(stream_datafetcher.get_data())
