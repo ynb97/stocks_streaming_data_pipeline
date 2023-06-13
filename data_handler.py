@@ -42,7 +42,7 @@ class GCPSecretManager():
 class HistoricDataFetcher:
     def __init__(self, *params, **kwparams) -> None:
         self.filters = kwparams.get("filters", "all")
-        self.reported_freq = kwparams.get("reportd_freq", "quarterly")
+        self.reported_freq = kwparams.get("reportd_freq", "annual")
         self.stock_symbol = kwparams.get("symbol", "AAPL")
         self._from = kwparams.get("_from", "2023-01-01")
         self._to = kwparams.get("_to", "2023-03-01")
@@ -51,6 +51,7 @@ class HistoricDataFetcher:
 
     
     def get_data(self, *params, **kwparams):
+        print(self.api_key)
         stock_symbol = kwparams.get("symbol", self.stock_symbol)
         historic_data = {
             "company_details": self.client.company_profile2(symbol=stock_symbol),
@@ -62,12 +63,11 @@ class HistoricDataFetcher:
             "basic_financials": self.client.company_basic_financials(stock_symbol, kwparams.get("filters", self.filters)),
             "financials_as_reported": self.client.financials_reported(
                                             symbol=stock_symbol, 
-                                            freq=kwparams.get("reported_freq", self.reported_freq),
-                                            _from=kwparams.get("_from", self._from),
-                                            to=kwparams.get("_to", self._to)
+                                            freq=kwparams.get("reported_freq", self.reported_freq)
                                         ),
             "created_at": dt.now()
         }
+        print(historic_data["company_details"])
 
         return historic_data
 
@@ -101,6 +101,8 @@ class StreamDataFetcher:
             }
         )
 
+        # print(query_params)
+
         return requests.get(self.url, params=query_params).text
 
 
@@ -109,7 +111,7 @@ class DataBaseHandler:
         # Define the MongoDB connection details
         self.mongo_creds = json.loads(GCPSecretManager(secret_config="mongoatlas_config").get_secret())
         username = self.mongo_creds["username"]
-        password = self.mongo_creds["password"]
+        password = quote_plus(self.mongo_creds["password"])
         cluster = ENV.get("mongoatlas_config").get("cluster")
         db_name = ENV.get("mongoatlas_config").get("db_name")
 
@@ -133,7 +135,6 @@ class DataBaseHandler:
         print(f"Stored {len(data)} records in the {collection_name} collection.")
     
 
-    #TODO: Add the logic to push data to big query
     def send_to_bq(self,data):
         df = pd.DataFrame(columns=['symbol','datetime','open', 'high', 'low', 'close', 'volume'])
         for i in data:
@@ -148,39 +149,51 @@ class DataBaseHandler:
     # Specify a (partial) schema. All columns are always written to the
     # table. The schema is used to assist in data type definitions.
         schema=[
-        # Specify the type of columns whose type cannot be auto-detected. For
-        # example the "title" column uses pandas dtype "object", so its
-        # data type is ambiguous.
-        bigquery.SchemaField("order_id", bigquery.enums.SqlTypeNames.INTEGER),
-        # Indexes are written if included in the schema by name.
-        bigquery.SchemaField("order_date", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField(" order_customer_id", bigquery.enums.SqlTypeNames.INTEGER),
-        bigquery.SchemaField(" order_status", bigquery.enums.SqlTypeNames.STRING)
-        
-        ],
-    # Optionally, set the write disposition. BigQuery appends loaded rows
-    # to an existing table by default, but with WRITE_TRUNCATE write
-    # disposition it replaces the table with the loaded data.
-        write_disposition="WRITE_TRUNCATE",
+                # Specify the type of columns whose type cannot be auto-detected. For
+                # example the "title" column uses pandas dtype "object", so its
+                # data type is ambiguous.
+                bigquery.SchemaField("symbol", bigquery.enums.SqlTypeNames.STRING),
+                # Indexes are written if included in the schema by name.
+                bigquery.SchemaField("datetime", bigquery.enums.SqlTypeNames.STRING),
+                bigquery.SchemaField("open", bigquery.enums.SqlTypeNames.FLOAT64),
+                bigquery.SchemaField("high", bigquery.enums.SqlTypeNames.FLOAT64),
+                bigquery.SchemaField("low", bigquery.enums.SqlTypeNames.FLOAT64),
+                bigquery.SchemaField("close", bigquery.enums.SqlTypeNames.FLOAT64),
+                bigquery.SchemaField("volume", bigquery.enums.SqlTypeNames.FLOAT64)       
+            ],
+            # Optionally, set the write disposition. BigQuery appends loaded rows
+            # to an existing table by default, but with WRITE_TRUNCATE write
+            # disposition it replaces the table with the loaded data.
+            write_disposition="WRITE_APPEND",
         )
-        table_id = "de2-gcp.partdata01.part_data_table"
+        table_id = "de2-gcp.trydata.stocks_data_try"
 
         job = client.load_table_from_dataframe(
-        df, table_id, job_config=job_config
+            df, table_id, job_config=job_config
         )  # Make an API request.
         job.result()  # Wait for the job to complete.
 
         table = client.get_table(table_id)  # Make an API request.
         print(
             "Loaded {} rows and {} columns to {}".format(
-            table.num_rows, len(table.schema), table_id
-        )
+                table.num_rows, len(table.schema), table_id
+            )
         )
 
         return print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
 
+    def mongo_to_bigquery(self,):
+
 
 
 if __name__ == "__main__":
+
     db_handler = DataBaseHandler()
+
+    # db_handler.store_data("Financials", [{"dummy": "dummy value"}])
     db_handler.client.close()
+    # historic_datafetcher = HistoricDataFetcher()
+    # historic_datafetcher.get_data()
+
+    # stream_datafetcher = StreamDataFetcher()
+    # print(stream_datafetcher.get_data())
