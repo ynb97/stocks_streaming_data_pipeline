@@ -1,5 +1,6 @@
 import pytz
 import json
+import time
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime as dt, time as t, timedelta as td
@@ -67,16 +68,29 @@ class DataPipeline:
     
 
     def historic_stocks_update(self):
-        historic_datafetcher = HistoricDataFetcher(
-                                _from=(self.current_date - td(days=7)).date().strftime("%Y-%m-%d"), 
-                                _to=self.current_date.date().strftime("%Y-%m-%d")
+        historic_datafetcher0 = HistoricDataFetcher(
+                                _from=(self.current_date.today() - td(days=7)).date().strftime("%Y-%m-%d"), 
+                                _to=self.current_date.today().date().strftime("%Y-%m-%d"),
+                                fetch_index=0
+                            )
+        
+        historic_datafetcher1 = HistoricDataFetcher(
+                                _from=(self.current_date.today() - td(days=14)).date().strftime("%Y-%m-%d"), 
+                                _to=(self.current_date.today() - td(days=7)).date().strftime("%Y-%m-%d"),
+                                fetch_index=1
                             )
 
         stock_data = []
 
         for stock in self.stock_symbols:
+            # time.sleep(2)
             stock_data.append(
-                historic_datafetcher.get_data(
+                historic_datafetcher0.get_data(
+                    symbol=stock
+                )
+            )
+            stock_data.append(
+                historic_datafetcher1.get_data(
                     symbol=stock
                 )
             )
@@ -92,7 +106,7 @@ class DataPipeline:
 
     def stock_weekly_financials(self):
         self.db_handler = DataBaseHandler()
-        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=26)
+        self.weekly_scheduler.add_job(self.historic_stocks_update, "cron", minute=33)
         self.weekly_scheduler.start()
     
 

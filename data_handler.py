@@ -41,6 +41,8 @@ class GCPSecretManager():
 
 class HistoricDataFetcher:
     def __init__(self, *params, **kwparams) -> None:
+        self.url = ENV.get("finnhub_config").get("api_url", "https://finnhub.io/api/v1/stock/financials-reported")
+        # = "?symbol=AAPL&freq=quarterly&from=2022-06-01&to=2022-12-01&token=chu91ihr01qphnn26110chu91ihr01qphnn2611g"
         self.filters = kwparams.get("filters", "all")
         self.reported_freq = kwparams.get("reportd_freq", "quarterly")
         self.stock_symbol = kwparams.get("symbol", "AAPL")
@@ -48,10 +50,38 @@ class HistoricDataFetcher:
         self._to = kwparams.get("_to", "2023-03-01")
         self.api_key = GCPSecretManager(secret_config="finnhub_config").get_secret()
         self.client = finnhub.Client(api_key=self.api_key)
+        self.fetch_index = kwparams.get("fetch_index", 0)
 
+        print(self._from)
+        print(self._to)
     
     def get_data(self, *params, **kwparams):
         stock_symbol = kwparams.get("symbol", self.stock_symbol)
+
+        # url = f"{self.url}"
+
+        query_params = {
+            "token": self.api_key,
+            "freq": self.reported_freq,
+            "symbol": stock_symbol
+        }
+        
+        # print(query_params)
+        financials_as_reported = json.loads(requests.get(self.url, params=query_params).text)
+
+        reported_financial_data = financials_as_reported.get("data", [None])
+
+        try:
+            financials_as_reported = {
+                "cik": financials_as_reported.get("cik", ""),
+                "data": [
+                    reported_financial_data[self.fetch_index]
+                ],
+                "symbol": financials_as_reported.get("symbol", "")
+            }
+        except IndexError:
+            financials_as_reported = []
+
         historic_data = {
             "company_details": self.client.company_profile2(symbol=stock_symbol),
             "news": self.client.company_news(
@@ -60,12 +90,7 @@ class HistoricDataFetcher:
                         to=kwparams.get("_to", self._to)
                     ),
             "basic_financials": self.client.company_basic_financials(stock_symbol, kwparams.get("filters", self.filters)),
-            "financials_as_reported": self.client.financials_reported(
-                                            symbol=stock_symbol, 
-                                            freq=kwparams.get("reported_freq", self.reported_freq),
-                                            _from=kwparams.get("_from", self._from),
-                                            to=kwparams.get("_to", self._to)
-                                        ),
+            "financials_as_reported": financials_as_reported,
             "created_at": dt.now()
         }
 
@@ -182,5 +207,9 @@ class DataBaseHandler:
 
 
 if __name__ == "__main__":
-    db_handler = DataBaseHandler()
-    db_handler.client.close()
+    from datetime import datetime as dt, timedelta as td
+    handler = HistoricDataFetcher(
+        _from=(dt(2022, 2,1) - td(days=7)).date().strftime("%Y-%m-%d"), 
+                                _to=dt(2022, 6,1).date().strftime("%Y-%m-%d")
+    )
+    handler.get_data()
