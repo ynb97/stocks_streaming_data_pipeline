@@ -11,7 +11,7 @@ parser.add_argument(
     action="store", 
     help="Stocks daily or weekly or db update", 
     default="sd", 
-    choices=["sd", "sw", "db"]
+    choices=["sd", "sw", "db", "wbq"]
 )
 
 args = parser.parse_args()
@@ -22,7 +22,8 @@ data_pipeline = DataPipeline()
 pipelines = {
     "sd": data_pipeline.stock_daily,
     "sw": data_pipeline.stock_weekly_financials,
-    "db": data_pipeline.daily_db_schedule
+    "db": data_pipeline.daily_db_schedule,
+    "wbq": data_pipeline.weekly_bq_update
 }
 
 pipelines[config["type"]]()

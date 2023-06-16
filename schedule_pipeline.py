@@ -48,7 +48,7 @@ class DataPipeline:
         
         self.kafka_client.send_data(json.dumps(stock_data))
 
-        if self.time_head.minute > 50:
+        if self.time_head.hour > 16:
             self.stream_scheduler.pause()
             print("streamer paused")
 
@@ -100,7 +100,7 @@ class DataPipeline:
         
     def stock_daily(self):
         print("daily added and running...")
-        self.daily_scheduler.add_job(self.daily_stocks_update, 'cron', day_of_week="mon-fri", minute=52, id="daily")
+        self.daily_scheduler.add_job(self.daily_stocks_update, 'cron', day_of_week="mon-fri", minute=7, id="daily")
         self.daily_scheduler.start()
         
 
@@ -129,7 +129,7 @@ class DataPipeline:
 
     def daily_db_schedule(self):
         try:
-            self.db_scheduler.add_job(self.stocks_db_update, "cron", minute=4, id="db-schedule")
+            self.db_scheduler.add_job(self.stocks_db_update, "cron", minute=59, id="db-schedule")
             self.db_scheduler.start()
         except KeyboardInterrupt:
             pass
@@ -137,11 +137,11 @@ class DataPipeline:
             self.kafka_client.consumer.close()
 
 
+    def weekly_bq_update(self):
+        self.db_handler = DataBaseHandler()
+        self.weekly_scheduler.add_job(self.db_handler.mongo_to_bq, "cron", minute=6)
+        self.weekly_scheduler.start()
+
 if __name__ == "__main__":
     data_pipeline = DataPipeline()
-    try:
-        data_pipeline.daily_db_schedule()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        data_pipeline.kafka_client.consumer.close()
+    data_pipeline.weekly_bq_update()

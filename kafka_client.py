@@ -8,10 +8,10 @@ class KafkaClient:
     def __init__(self) -> None:
         self.producer = Producer(self.read_ccloud_config("client.properties"))
         props = self.read_ccloud_config("client.properties")
-        props["group.id"] = "dummy-consumer-3"
+        props["group.id"] = "dummy-consumer-6"
         props["auto.offset.reset"] = "earliest"
         self.consumer = Consumer(props)
-        self.consumer.subscribe(["daily_stocks_data"])
+        self.consumer.subscribe(["daily_stocks_data2"])
 
     def read_ccloud_config(self, config_file):
         conf = {}
@@ -25,14 +25,14 @@ class KafkaClient:
 
 
     def send_data(self, data):
-        self.producer.produce("daily_stocks_data", value=data)
+        self.producer.produce("daily_stocks_data2", value=data)
         self.producer.flush()
 
     
     def retrieve_data(self):
 
         # try:
-        msg = self.consumer.poll(5000.0)
+        msg = self.consumer.poll(3000.0)
         if msg is not None and msg.error() is None:
             return json.loads(msg.value().decode("utf-8"))
         else:

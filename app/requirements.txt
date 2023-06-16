@@ -1,0 +1,15 @@
+APScheduler
+google-api-core
+google-auth
+google-cloud-bigquery
+google-cloud-core
+google-cloud-secret-manager
+google-crc32c
+google-resumable-media
+pandas
+plotly
+python-dotenv
+requests
+streamlit-autorefresh
+streamlit-nightly
+db-dtypes
